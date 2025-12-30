@@ -1,12 +1,18 @@
-# NoiseReduction
-Noise Reduction Techniques For Digital Audio Samples
+## Overview
+Transforms audio to the frequency domain (STFT), filters unwanted components, then reconstructs audio via inverse STFT. 
 
-This project seeks to investigate how noise reduction is implemented 
-by using Fourier theory. The programs use the Discrete Fourier Transform 
-to filter out the unwanted frequencies of a digital audio sample. 
+## Repo layout
+- `Audios/` (sample input audio)
+- `Filtering Techniques/` (core filtering work)
+- `Demo Audio Analysis/` (analysis)
+- `README.md`
 
-The Short-time Fourier Transform (STFT) applies the DFT to short fragments of time in a signal. It is a 
-powerful technique for analyzing a signal with varying frequency components. In the computer program, 
-the STFT will be used to transform the audio signal from the time domain to the frequency domain. Then, 
-an inverse STFT will be used to convert a filtered frequency back to the time domain. The new audio in 
-the time domain will be the cleaned version with noise reduction.
+## Getting started
+1. Create a Python env.
+2. Install DSP dependencies (NumPy, SciPy, Librosa, Matplotlib).
+3. Record audio file and place in directory (file type must be compatible with Librosa) 
+4. Run desired script in `Filtering Techniques/` and review outputs in `Demo Audio Analysis/`.
+
+Notes: 
+- If the audio file is not found, adjust the script's input file pathway.
+- Ensure the script's output file pathway is as intended.
