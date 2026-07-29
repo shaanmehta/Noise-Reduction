@@ -1,0 +1,35 @@
+.git
+.gitignore
+.venv
+venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+.pytest_cache
+backend/tests
+.claude
+*.md
+!README.md
+.env
+.env.*
+
+# No audio or documents ever enter the build context. These use **/ so they
+# match at every depth: a bare *.wav would only match the repository root and
+# would let a nested path such as Audios/clip.wav through. The Dockerfile also
+# copies only backend/app and frontend/, so this is the second of two barriers.
+**/*.wav
+**/*.mp3
+**/*.flac
+**/*.ogg
+**/*.oga
+**/*.m4a
+**/*.aac
+**/*.aiff
+**/*.aif
+**/*.pdf
+**/*.png
+**/*.jpg
+**/*.jpeg
+
+.DS_Store

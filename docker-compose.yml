@@ -1,0 +1,18 @@
+# Local run of the production image. `docker compose up --build` then open
+# http://localhost:8000 -- the API and the built frontend share that origin.
+services:
+  noisereduce:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Same-origin in this configuration, so no cross-origin entry is needed.
+      ALLOWED_ORIGINS: "http://localhost:8000"
+      MAX_UPLOAD_BYTES: "16777216"
+      MAX_DURATION_SECONDS: "120"
+      CLIP_TTL_SECONDS: "1800"
+      PROCESSING_TIMEOUT_SECONDS: "30"
+    restart: unless-stopped
+    # Decoded audio is held in memory, so the ceiling here should stay above
+    # MAX_STORE_BYTES plus normal interpreter overhead.
+    mem_limit: 1g

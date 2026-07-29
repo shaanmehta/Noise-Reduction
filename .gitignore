@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.npm/
+*.tsbuildinfo
+
+# Build output
+frontend/dist/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Temporary processing and upload scratch space. The service works in memory,
+# but anything that does land on disk belongs here and never in the repository.
+tmp/
+temp/
+uploads/
+*.tmp
+
+# Audio and rendered results. Test material and processed output stay local:
+# the only clip this project ships is generated at runtime by the backend.
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.oga
+*.m4a
+*.aac
+*.aiff
+*.aif
+
+# Documents and exported figures
+*.pdf
+
+# Local tooling settings, which record absolute paths from the machine they
+# were generated on.
+.claude/
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
