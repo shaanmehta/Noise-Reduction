@@ -72,16 +72,15 @@ export function Dropzone({ config, busy, compact, onFile }: DropzoneProps) {
       >
         {compact ? null : <WaveGlyph />}
         <span className="dropzone__primary">
-          {busy
-            ? "Reading audio"
-            : compact
-              ? "Drop another file, or click to browse"
-              : "Drop an audio file, or click to browse"}
+          {busy ? "Reading audio" : compact ? "Choose a different file" : "Drop an audio file here"}
         </span>
         {compact ? null : (
-          <span className="dropzone__hint">
-            WAV MP3 FLAC OGG M4A {limit && seconds ? `/ up to ${limit}, ${seconds}` : ""}
-          </span>
+          <>
+            <span className="dropzone__secondary">or click to browse</span>
+            <span className="dropzone__hint">
+              MP3, WAV, M4A and more{limit && seconds ? ` / up to ${limit}, ${seconds}` : ""}
+            </span>
+          </>
         )}
       </button>
       <input

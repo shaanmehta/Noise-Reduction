@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import FastAPI, File, Request, UploadFile
@@ -140,28 +141,58 @@ async def compare(request: Request, clip_id: str, body: FilterRequest) -> dict:
     return await _run(service.compare_filters, clip, body)
 
 
-def _audio_response(payload: bytes, filename: str) -> Response:
-    return Response(
-        content=payload,
-        media_type="audio/wav",
-        headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
-            "Cache-Control": "private, max-age=600",
-            "Accept-Ranges": "none",
-        },
-    )
+RANGE_PATTERN = re.compile(r"bytes=(\d*)-(\d*)")
+
+
+def _audio_response(payload: bytes, filename: str, request: Request) -> Response:
+    """Serve audio with byte-range support.
+
+    Range support is what makes a media element seekable. Without it the
+    browser reports an empty seekable range and silently ignores every attempt
+    to set currentTime, which breaks the scrub bar and stops playback position
+    carrying across when the listener switches between source and processed.
+    """
+    total = len(payload)
+    headers = {
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Cache-Control": "private, max-age=600",
+        "Accept-Ranges": "bytes",
+    }
+
+    match = RANGE_PATTERN.fullmatch((request.headers.get("range") or "").strip())
+    if match:
+        start_text, end_text = match.groups()
+        if not start_text and not end_text:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+        if start_text:
+            start = int(start_text)
+            end = int(end_text) if end_text else total - 1
+        else:
+            # A suffix range asks for the final N bytes.
+            start = max(0, total - int(end_text))
+            end = total - 1
+        if start >= total:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{total}"})
+        end = min(end, total - 1)
+        chunk = payload[start : end + 1]
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        return Response(content=chunk, status_code=206, media_type="audio/wav", headers=headers)
+
+    return Response(content=payload, media_type="audio/wav", headers=headers)
 
 
 @app.get("/api/clips/{clip_id}/audio/original.wav")
-async def original_audio(clip_id: str) -> Response:
+async def original_audio(clip_id: str, request: Request) -> Response:
     clip = store.get(clip_id)
-    return _audio_response(clip.original_bytes, "original.wav")
+    return _audio_response(clip.original_bytes, "original.wav", request)
 
 
 @app.get("/api/clips/{clip_id}/renders/{render_id}.wav")
-async def render_audio(clip_id: str, render_id: str) -> Response:
+async def render_audio(clip_id: str, render_id: str, request: Request) -> Response:
+    # Named the same way the browser download is, so saving the file from the
+    # player or straight from the URL gives an identical result.
     clip = store.get(clip_id)
-    return _audio_response(store.get_render(clip, render_id), "processed.wav")
+    return _audio_response(store.get_render(clip, render_id), "Processed-Audio.wav", request)
 
 
 # Serving the built frontend from the same process is what makes the single

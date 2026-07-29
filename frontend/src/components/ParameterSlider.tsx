@@ -5,14 +5,14 @@ interface ParameterSliderProps {
   max: number;
   step?: number;
   display: string;
+  /** Optional word next to the number, e.g. "Balanced". */
+  caption?: string;
   note?: string;
   disabled?: boolean;
   /** Log scaling suits frequency controls, where the useful range spans decades. */
   logarithmic?: boolean;
   onChange: (value: number) => void;
 }
-
-const TICKS = 9;
 
 export function ParameterSlider({
   label,
@@ -21,24 +21,21 @@ export function ParameterSlider({
   max,
   step = 1,
   display,
+  caption,
   note,
   disabled,
   logarithmic,
   onChange,
 }: ParameterSliderProps) {
-  // The input always runs 0 to 1000; the mapping to real units happens here so
-  // that a frequency slider gives even resolution across the audible range
-  // instead of cramming everything below 2 kHz into the first few pixels.
-  const toSlider = (real: number) => {
-    if (!logarithmic) return ((real - min) / (max - min)) * 1000;
-    return (Math.log(real / min) / Math.log(max / min)) * 1000;
-  };
-  const fromSlider = (raw: number) => {
-    if (!logarithmic) return min + (raw / 1000) * (max - min);
-    return min * Math.pow(max / min, raw / 1000);
-  };
-
+  // Frequency controls run on a log scale so the audible range spreads evenly
+  // across the track instead of bunching everything below 2 kHz at one end.
+  // Plain 1-to-10 controls step directly.
   const identifier = `param-${label.replace(/\s+/g, "-").toLowerCase()}`;
+
+  const toSlider = (real: number) =>
+    logarithmic ? (Math.log(real / min) / Math.log(max / min)) * 1000 : real;
+  const fromSlider = (raw: number) =>
+    logarithmic ? min * Math.pow(max / min, raw / 1000) : raw;
 
   return (
     <div className="field">
@@ -46,26 +43,24 @@ export function ParameterSlider({
         <label className="field__label" htmlFor={identifier}>
           {label}
         </label>
-        <span className="field__value">{display}</span>
+        <span className="field__value">
+          {display}
+          {caption ? <span className="field__caption">{caption}</span> : null}
+        </span>
       </div>
       <div className="slider">
-        <div className="slider__ticks" aria-hidden="true">
-          {Array.from({ length: TICKS }, (_, index) => (
-            <span key={index} className="slider__tick" />
-          ))}
-        </div>
         <input
           id={identifier}
           type="range"
-          min={0}
-          max={1000}
-          step={1}
+          min={logarithmic ? 0 : min}
+          max={logarithmic ? 1000 : max}
+          step={logarithmic ? 1 : step}
           value={Math.round(toSlider(Math.min(Math.max(value, min), max)))}
           disabled={disabled}
-          aria-valuetext={display}
+          aria-valuetext={caption ? `${display}, ${caption}` : display}
           onChange={(event) => {
             const real = fromSlider(Number(event.target.value));
-            onChange(step >= 1 ? Math.round(real / step) * step : real);
+            onChange(logarithmic ? Math.round(real / step) * step : real);
           }}
         />
       </div>

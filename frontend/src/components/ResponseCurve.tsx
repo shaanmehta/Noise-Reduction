@@ -47,9 +47,9 @@ export function ResponseCurve({ points, nyquist }: ResponseCurveProps) {
 
   if (!geometry) {
     return (
-      <p className="field__note" style={{ padding: "var(--s4)" }}>
-        The spectral gate builds a gain that changes over time as well as frequency, so it has no single
-        fixed response to plot. The spectrogram above shows what it removed.
+      <p className="empty">
+        Noise removal adapts as the audio changes, so there is no fixed shape to show. Switch to the
+        Spectrum view above to see what it took out.
       </p>
     );
   }

@@ -2,7 +2,14 @@ import { hertz } from "../lib/format";
 import {
   FILTERS,
   ROLLOFFS,
+  SMOOTHING_STEPS,
+  dbToDepth,
+  dbToStrength,
+  depthToDb,
   filterDefinition,
+  smoothingIndex,
+  strengthToDb,
+  strengthWord,
   usesHighCutoff,
   usesLowCutoff,
   usesRolloff,
@@ -24,6 +31,10 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
   const ceiling = Math.max(nyquist - 20, 1000);
   const update = (patch: Partial<FilterSettings>) => onChange({ ...settings, ...patch });
 
+  const strength = dbToStrength(settings.threshold_db);
+  const depth = dbToDepth(settings.reduction_db);
+  const smoothing = smoothingIndex(settings);
+
   return (
     <div className="stack">
       <div className="selector" role="radiogroup" aria-label="Filter type">
@@ -39,72 +50,67 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
               onClick={() => update({ kind: entry.kind as FilterKind })}
               disabled={disabled}
             >
-              <span className="selector__index">{entry.index}</span>
               <span className="selector__label">{entry.label}</span>
+              <span className="selector__best">{entry.best}</span>
             </button>
           );
         })}
       </div>
 
-      <p className="field__note">{definition.summary}</p>
+      <p className="helper">{definition.summary}</p>
 
       {settings.kind === "spectral_gate" ? (
         <>
           <ParameterSlider
-            label="Threshold"
-            value={settings.threshold_db}
-            min={-12}
-            max={36}
-            step={0.5}
-            display={`${settings.threshold_db.toFixed(1)} dB`}
-            note="How far above the measured noise floor a band must sit to be kept. Raise it to remove more, lower it if the signal starts breaking up."
-            disabled={disabled}
-            onChange={(value) => update({ threshold_db: value })}
-          />
-          <ParameterSlider
-            label="Reduction"
-            value={settings.reduction_db}
-            min={-60}
-            max={0}
+            label="Strength"
+            value={strength}
+            min={1}
+            max={10}
             step={1}
-            display={`${settings.reduction_db.toFixed(0)} dB`}
-            note="How far rejected bands are pushed down. Leaving a little noise in sounds more natural than silencing it completely."
+            display={`${strength} / 10`}
+            caption={strengthWord(strength)}
+            note="How much background noise to take out."
             disabled={disabled}
-            onChange={(value) => update({ reduction_db: value })}
+            onChange={(value) => update({ threshold_db: strengthToDb(Math.round(value)) })}
           />
           <ParameterSlider
-            label="Time smoothing"
-            value={settings.time_smoothing}
+            label="Depth"
+            value={depth}
             min={1}
-            max={21}
-            step={2}
-            display={`${settings.time_smoothing} frames`}
-            note="Median width across time. Wider settings suppress the warbling artefacts that per-frame thresholding produces."
+            max={10}
+            step={1}
+            display={`${depth} / 10`}
+            note="How far the noise is turned down. Leaving a little in sounds more natural."
             disabled={disabled}
-            onChange={(value) => update({ time_smoothing: Math.max(1, Math.round(value)) })}
+            onChange={(value) => update({ reduction_db: depthToDb(Math.round(value)) })}
           />
           <ParameterSlider
-            label="Frequency smoothing"
-            value={settings.freq_smoothing}
-            min={1}
-            max={15}
-            step={2}
-            display={`${settings.freq_smoothing} bins`}
+            label="Smoothing"
+            value={smoothing}
+            min={0}
+            max={SMOOTHING_STEPS.length - 1}
+            step={1}
+            display={SMOOTHING_STEPS[smoothing].label}
+            note="Cleans up the watery, warbling sound that noise removal can leave behind."
             disabled={disabled}
-            onChange={(value) => update({ freq_smoothing: Math.max(1, Math.round(value)) })}
+            onChange={(value) => {
+              const step = SMOOTHING_STEPS[Math.round(value)] ?? SMOOTHING_STEPS[2];
+              update({ time_smoothing: step.time, freq_smoothing: step.freq });
+            }}
           />
         </>
       ) : null}
 
       {usesLowCutoff(settings.kind) ? (
         <ParameterSlider
-          label={settings.kind === "band_pass" ? "Lower edge" : "Cutoff"}
+          label={settings.kind === "band_pass" ? "Keep above" : "Cut below"}
           value={settings.low_cutoff_hz}
           min={MIN_HZ}
           max={ceiling}
           step={1}
           logarithmic
           display={hertz(settings.low_cutoff_hz)}
+          note="Sounds lower than this are removed."
           disabled={disabled}
           onChange={(value) => update({ low_cutoff_hz: Math.round(value) })}
         />
@@ -112,13 +118,14 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
 
       {usesHighCutoff(settings.kind) ? (
         <ParameterSlider
-          label={settings.kind === "band_pass" ? "Upper edge" : "Cutoff"}
+          label={settings.kind === "band_pass" ? "Keep below" : "Cut above"}
           value={settings.high_cutoff_hz}
           min={MIN_HZ}
           max={ceiling}
           step={1}
           logarithmic
           display={hertz(settings.high_cutoff_hz)}
+          note="Sounds higher than this are removed."
           disabled={disabled}
           onChange={(value) => update({ high_cutoff_hz: Math.round(value) })}
         />
@@ -128,7 +135,7 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
         <div className="field">
           <div className="field__head">
             <span className="field__label" id="rolloff-label">
-              Roll-off
+              Edge
             </span>
           </div>
           <div className="segmented" role="radiogroup" aria-labelledby="rolloff-label">
@@ -150,35 +157,6 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
             {ROLLOFFS.find((entry) => entry.value === settings.rolloff)?.summary}
           </p>
         </div>
-      ) : null}
-
-      {usesRolloff(settings.kind) && settings.rolloff === "butterworth" ? (
-        <ParameterSlider
-          label="Order"
-          value={settings.order}
-          min={1}
-          max={12}
-          step={1}
-          display={`${settings.order}`}
-          note="Higher orders fall away faster past the cutoff. Each step adds roughly 6 dB per octave."
-          disabled={disabled}
-          onChange={(value) => update({ order: Math.round(value) })}
-        />
-      ) : null}
-
-      {usesRolloff(settings.kind) && settings.rolloff === "cosine" ? (
-        <ParameterSlider
-          label="Transition width"
-          value={settings.transition_hz}
-          min={10}
-          max={4000}
-          step={10}
-          logarithmic
-          display={hertz(settings.transition_hz)}
-          note="Width of the raised-cosine edge. Narrow enough and it behaves like a brick wall, ringing included."
-          disabled={disabled}
-          onChange={(value) => update({ transition_hz: Math.round(value) })}
-        />
       ) : null}
     </div>
   );

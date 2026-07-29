@@ -4,8 +4,9 @@ import { theme } from "../lib/theme";
 import type { Waveform } from "../lib/types";
 
 interface WaveformScopeProps {
-  source: Waveform | null;
-  processed: Waveform | null;
+  data: Waveform | null;
+  /** Colours the trace to match the source/processed selection above it. */
+  processed: boolean;
   duration: number;
   position: number;
   busy?: boolean;
@@ -14,19 +15,19 @@ interface WaveformScopeProps {
 }
 
 /**
- * Overlaid min/max envelopes for the source and processed signals.
+ * The loudness envelope of whichever track is selected.
  *
- * The source is drawn as a filled silhouette and the processed signal as a
- * line over the top, so the difference between them reads as the area that
- * has been removed rather than as two shapes to mentally subtract.
+ * Only one signal is drawn at a time so the picture always matches what is
+ * playing. Flipping between source and processed swaps the trace in place,
+ * which makes the difference easier to see than two shapes layered together.
  */
 export function WaveformScope({
-  source,
+  data,
   processed,
   duration,
   position,
   busy,
-  height = 168,
+  height = 190,
   onSeek,
 }: WaveformScopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -50,9 +51,8 @@ export function WaveformScope({
       context.clearRect(0, 0, width, height);
 
       const middle = height / 2;
-      const amplitude = height / 2 - 6;
+      const amplitude = height / 2 - 8;
 
-      // Reference graticule: centre line plus half-scale marks.
       context.strokeStyle = theme.grid;
       context.lineWidth = 1;
       for (const fraction of [0.25, 0.75]) {
@@ -67,12 +67,8 @@ export function WaveformScope({
       context.lineTo(width, Math.round(middle) + 0.5);
       context.stroke();
 
-      // The source is a solid silhouette; the processed signal is an outline
-      // over it. Drawing the second as a filled block too would simply hide
-      // the first, and the point of the view is the difference between them.
-      const silhouette = (data: Waveform, style: string) => {
+      if (data && data.max.length) {
         const count = data.max.length;
-        if (count === 0) return;
         const step = width / count;
         context.beginPath();
         for (let index = 0; index < count; index += 1) {
@@ -80,48 +76,19 @@ export function WaveformScope({
           context.moveTo(x, middle - data.max[index] * amplitude);
           context.lineTo(x, middle - data.min[index] * amplitude);
         }
-        context.strokeStyle = style;
+        context.strokeStyle = processed ? theme.processed : theme.source;
         context.lineWidth = Math.max(step, 1);
-        context.globalAlpha = 0.55;
         context.stroke();
-        context.globalAlpha = 1;
-      };
-
-      const envelope = (data: Waveform, style: string, fillStyle: string) => {
-        const count = data.max.length;
-        if (count === 0) return;
-        const step = width / count;
-
-        context.beginPath();
-        for (let index = 0; index < count; index += 1) {
-          const x = index * step;
-          const y = middle - data.max[index] * amplitude;
-          if (index === 0) context.moveTo(x, y);
-          else context.lineTo(x, y);
-        }
-        for (let index = count - 1; index >= 0; index -= 1) {
-          context.lineTo(index * step, middle - data.min[index] * amplitude);
-        }
-        context.closePath();
-        context.fillStyle = fillStyle;
-        context.fill();
-        context.strokeStyle = style;
-        context.lineWidth = 1;
-        context.stroke();
-      };
-
-      if (source) silhouette(source, theme.source);
-      if (processed) envelope(processed, theme.processed, theme.processedSoft);
+      }
 
       if (duration > 0) {
         const x = Math.round((position / duration) * width) + 0.5;
         context.strokeStyle = theme.playhead;
-        context.globalAlpha = 0.75;
+        context.lineWidth = 1;
         context.beginPath();
         context.moveTo(x, 0);
         context.lineTo(x, height);
         context.stroke();
-        context.globalAlpha = 1;
       }
     };
 
@@ -129,7 +96,7 @@ export function WaveformScope({
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [source, processed, duration, position, height]);
+  }, [data, processed, duration, position, height]);
 
   const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!onSeek || duration <= 0) return;
@@ -144,7 +111,7 @@ export function WaveformScope({
       style={{ height, cursor: onSeek ? "crosshair" : "default" }}
       onClick={handleSeek}
       role="img"
-      aria-label="Waveform of the source audio overlaid with the processed result"
+      aria-label={`Waveform of the ${processed ? "processed" : "source"} audio`}
     >
       <canvas ref={canvasRef} />
     </div>

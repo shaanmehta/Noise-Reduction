@@ -15,14 +15,14 @@ interface TransportProps {
 
 function PlayGlyph({ playing }: { playing: boolean }) {
   return (
-    <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true">
+    <svg width="16" height="18" viewBox="0 0 16 18" aria-hidden="true">
       {playing ? (
         <>
-          <rect x="2" y="1" width="3.5" height="14" fill="currentColor" />
-          <rect x="8.5" y="1" width="3.5" height="14" fill="currentColor" />
+          <rect x="2" y="1" width="4" height="16" fill="currentColor" />
+          <rect x="10" y="1" width="4" height="16" fill="currentColor" />
         </>
       ) : (
-        <polygon points="2,1 13,8 2,15" fill="currentColor" />
+        <polygon points="2,1 15,9 2,17" fill="currentColor" />
       )}
     </svg>
   );
@@ -41,35 +41,37 @@ export function Transport({
 }: TransportProps) {
   return (
     <div className="transport">
-      <button
-        type="button"
-        className="transport__play"
-        onClick={onToggle}
-        disabled={!ready}
-        aria-label={playing ? "Pause" : "Play"}
-      >
-        <PlayGlyph playing={playing} />
-      </button>
-
-      <span className="transport__time">
-        {formatSeconds(position)} / {formatSeconds(duration)}
-      </span>
-
-      <div className="slider transport__scrub">
-        <input
-          type="range"
-          min={0}
-          max={Math.max(duration, 0.01)}
-          step={0.01}
-          value={Math.min(position, duration)}
+      <div className="transport__row">
+        <button
+          type="button"
+          className="transport__play"
+          onClick={onToggle}
           disabled={!ready}
-          aria-label="Playback position"
-          aria-valuetext={formatSeconds(position)}
-          onChange={(event) => onSeek(Number(event.target.value))}
-        />
+          aria-label={playing ? "Pause" : "Play"}
+        >
+          <PlayGlyph playing={playing} />
+        </button>
+
+        <span className="transport__time">
+          {formatSeconds(position)} / {formatSeconds(duration)}
+        </span>
+
+        <div className="slider transport__scrub">
+          <input
+            type="range"
+            min={0}
+            max={Math.max(duration, 0.01)}
+            step={0.01}
+            value={Math.min(position, duration)}
+            disabled={!ready}
+            aria-label="Playback position"
+            aria-valuetext={formatSeconds(position)}
+            onChange={(event) => onSeek(Number(event.target.value))}
+          />
+        </div>
       </div>
 
-      <div className="transport__ab" role="radiogroup" aria-label="Compare source and processed audio">
+      <div className="transport__ab" role="radiogroup" aria-label="Choose which audio to hear and inspect">
         <button
           type="button"
           role="radio"
@@ -78,7 +80,7 @@ export function Transport({
           data-active={side === "a"}
           onClick={() => onSelectSide("a")}
         >
-          A Source
+          Source Audio
         </button>
         <button
           type="button"
@@ -89,7 +91,7 @@ export function Transport({
           onClick={() => onSelectSide("b")}
           disabled={!hasProcessed}
         >
-          B Processed
+          Processed Audio
         </button>
       </div>
     </div>

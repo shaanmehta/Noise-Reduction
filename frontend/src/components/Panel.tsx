@@ -5,35 +5,30 @@ interface PanelProps {
   title: string;
   status?: ReactNode;
   flush?: boolean;
+  /** Highlights the step the visitor should act on next. */
+  active?: boolean;
   children: ReactNode;
 }
 
-/** Instrument-style container: index, title, rule, and an optional status readout. */
-export function Panel({ index, title, status, flush, children }: PanelProps) {
+/**
+ * A numbered step. The number sits in a badge rather than running inline with
+ * the title, so the sequence through the page is readable at a glance.
+ */
+export function Panel({ index, title, status, flush, active, children }: PanelProps) {
   return (
-    <section className="panel">
+    <section className={`panel${active ? " panel--active" : ""}`}>
       <header className="panel__header">
-        <span className="panel__index">{index}</span>
-        <h2 className="panel__title">{title}</h2>
+        <span className="panel__index" aria-hidden="true">
+          {index}
+        </span>
+        <h2 className="panel__title">
+          <span className="visually-hidden">{`Step ${Number(index)}: `}</span>
+          {title}
+        </h2>
         <span className="panel__fill" aria-hidden="true" />
         {status ? <span className="panel__status">{status}</span> : null}
       </header>
       <div className={flush ? "panel__body panel__body--flush" : "panel__body"}>{children}</div>
     </section>
-  );
-}
-
-interface ReadoutProps {
-  label: string;
-  value: ReactNode;
-  dim?: boolean;
-}
-
-export function Readout({ label, value, dim }: ReadoutProps) {
-  return (
-    <div className="readout">
-      <span className="readout__label">{label}</span>
-      <span className={dim ? "readout__value readout__value--dim" : "readout__value"}>{value}</span>
-    </div>
   );
 }

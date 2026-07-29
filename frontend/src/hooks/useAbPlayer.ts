@@ -14,18 +14,20 @@ interface AbPlayer {
 }
 
 /**
- * Synchronised A/B playback of the source and processed audio.
+ * Playback of the source and processed audio, one at a time.
  *
- * Both elements play at once and the inactive one is silenced, which is how
- * comparison works on a mixing desk: switching is instantaneous and the two
- * versions stay locked to the same instant of the recording. Switching by
- * pausing and seeking would introduce a gap exactly where the listener is
- * trying to hear a difference.
+ * Both files are kept loaded so switching is quick, but only the selected one
+ * is ever playing: the other is paused, not merely silenced. Running both at
+ * once and muting one is a common trick for instant comparison, and it is
+ * exactly what made the processed track audible twice over, so the inactive
+ * element is now stopped outright. Switching carries the playhead across, so
+ * you still hear the same moment of the recording either way.
  */
 export function useAbPlayer(sourceUrl: string | null, processedUrl: string | null): AbPlayer {
   const sourceRef = useRef<HTMLAudioElement | null>(null);
   const processedRef = useRef<HTMLAudioElement | null>(null);
   const frameRef = useRef<number>(0);
+  const sideRef = useRef<Side>("b");
 
   const [playing, setPlaying] = useState(false);
   const [position, setPosition] = useState(0);
@@ -41,6 +43,20 @@ export function useAbPlayer(sourceUrl: string | null, processedUrl: string | nul
     }
   }
 
+  /** The element the listener should be hearing right now. */
+  const active = useCallback(
+    () => (sideRef.current === "a" ? sourceRef.current : processedRef.current),
+    [],
+  );
+  const inactive = useCallback(
+    () => (sideRef.current === "a" ? processedRef.current : sourceRef.current),
+    [],
+  );
+
+  useEffect(() => {
+    sideRef.current = side;
+  }, [side]);
+
   // Load the source track. Changing it resets the transport entirely.
   useEffect(() => {
     const element = sourceRef.current;
@@ -49,6 +65,7 @@ export function useAbPlayer(sourceUrl: string | null, processedUrl: string | nul
     setPosition(0);
     setReady(false);
     element.pause();
+    processedRef.current?.pause();
     if (!sourceUrl) {
       element.removeAttribute("src");
       element.load();
@@ -78,7 +95,8 @@ export function useAbPlayer(sourceUrl: string | null, processedUrl: string | nul
     }
 
     const resumeAt = source.currentTime;
-    const wasPlaying = !source.paused;
+    const wasPlaying = sideRef.current === "b" && !element.paused;
+    element.pause();
     element.src = processedUrl;
     element.load();
 
@@ -94,54 +112,58 @@ export function useAbPlayer(sourceUrl: string | null, processedUrl: string | nul
     return () => element.removeEventListener("canplay", onReady);
   }, [processedUrl]);
 
-  // Only the selected side is audible.
+  // Both elements stay at full volume. Silence comes from being paused, which
+  // is the only state that guarantees a track cannot be heard.
   useEffect(() => {
-    if (sourceRef.current) sourceRef.current.volume = side === "a" ? 1 : 0;
-    if (processedRef.current) processedRef.current.volume = side === "b" ? 1 : 0;
-  }, [side, processedUrl]);
+    if (sourceRef.current) sourceRef.current.volume = 1;
+    if (processedRef.current) processedRef.current.volume = 1;
+  }, []);
 
-  // Drive the playhead from the source element, which is always loaded.
+  // Drive the playhead from whichever element is actually playing.
   useEffect(() => {
     if (!playing) {
       cancelAnimationFrame(frameRef.current);
       return;
     }
     const step = () => {
-      const element = sourceRef.current;
-      if (element) {
-        setPosition(element.currentTime);
-        if (element.ended) {
-          setPlaying(false);
-          setPosition(0);
-          return;
-        }
-      }
+      const element = active();
+      if (element) setPosition(element.currentTime);
       frameRef.current = requestAnimationFrame(step);
     };
     frameRef.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frameRef.current);
-  }, [playing]);
+  }, [playing, active]);
 
+  // Animation frames are suspended while the tab is in the background, so the
+  // elements' own progress events keep the position honest.
   useEffect(() => {
-    const source = sourceRef.current;
-    if (!source) return;
+    const elements = [sourceRef.current, processedRef.current].filter(Boolean) as HTMLAudioElement[];
+    const onTimeUpdate = (event: Event) => {
+      if (event.target === active()) setPosition((event.target as HTMLAudioElement).currentTime);
+    };
     const onEnded = () => {
       setPlaying(false);
       setPosition(0);
-      source.currentTime = 0;
-      if (processedRef.current) processedRef.current.currentTime = 0;
+      for (const element of elements) {
+        element.pause();
+        try {
+          element.currentTime = 0;
+        } catch {
+          // Ignored: the element resets on its next load regardless.
+        }
+      }
     };
-    // Animation frames are suspended while the tab is in the background, so
-    // the element's own progress events keep the position honest. They fire
-    // a few times a second, which is coarse for a playhead but correct.
-    const onTimeUpdate = () => setPosition(source.currentTime);
-    source.addEventListener("ended", onEnded);
-    source.addEventListener("timeupdate", onTimeUpdate);
+    for (const element of elements) {
+      element.addEventListener("timeupdate", onTimeUpdate);
+      element.addEventListener("ended", onEnded);
+    }
     return () => {
-      source.removeEventListener("ended", onEnded);
-      source.removeEventListener("timeupdate", onTimeUpdate);
+      for (const element of elements) {
+        element.removeEventListener("timeupdate", onTimeUpdate);
+        element.removeEventListener("ended", onEnded);
+      }
     };
-  }, []);
+  }, [active]);
 
   useEffect(() => {
     const elements = [sourceRef.current, processedRef.current];
@@ -154,60 +176,64 @@ export function useAbPlayer(sourceUrl: string | null, processedUrl: string | nul
   }, []);
 
   const toggle = useCallback(() => {
-    const source = sourceRef.current;
-    const processed = processedRef.current;
-    if (!source) return;
-    if (source.paused) {
-      // Realign before starting so drift from a previous render cannot persist.
-      if (processed && processed.src) {
-        try {
-          processed.currentTime = source.currentTime;
-        } catch {
-          // Ignored: playback continues from wherever the element is ready.
-        }
-        void processed.play().catch(() => undefined);
-      }
-      void source
+    const current = active();
+    const other = inactive();
+    if (!current || !current.src) return;
+    other?.pause();
+
+    if (current.paused) {
+      void current
         .play()
         .then(() => setPlaying(true))
         .catch(() => setPlaying(false));
     } else {
-      source.pause();
-      processed?.pause();
+      current.pause();
       setPlaying(false);
     }
-  }, []);
+  }, [active, inactive]);
 
   const seek = useCallback((seconds: number) => {
-    const source = sourceRef.current;
-    const processed = processedRef.current;
-    if (!source) return;
-    const target = Math.max(0, Math.min(seconds, source.duration || seconds));
-    source.currentTime = target;
-    if (processed && processed.src) {
+    const elements = [sourceRef.current, processedRef.current].filter(Boolean) as HTMLAudioElement[];
+    for (const element of elements) {
+      if (!element.src) continue;
+      const target = Math.max(0, Math.min(seconds, element.duration || seconds));
       try {
-        processed.currentTime = Math.min(target, processed.duration || target);
+        element.currentTime = target;
+      } catch {
+        // Ignored: seeking before metadata arrives is a no-op, not a failure.
+      }
+    }
+    setPosition(Math.max(0, seconds));
+  }, []);
+
+  const selectSide = useCallback(
+    (next: Side) => {
+      const previous = active();
+      sideRef.current = next;
+      setSide(next);
+
+      const upcoming = next === "a" ? sourceRef.current : processedRef.current;
+      if (!previous || !upcoming) return;
+
+      // Hand the playhead over, then swap which element is running so that
+      // exactly one is ever producing sound.
+      const at = previous.currentTime;
+      const wasPlaying = !previous.paused;
+      previous.pause();
+      try {
+        upcoming.currentTime = Math.min(at, upcoming.duration || at);
       } catch {
         // Ignored, as above.
       }
-    }
-    setPosition(target);
-  }, []);
-
-  const selectSide = useCallback((next: Side) => {
-    const source = sourceRef.current;
-    const processed = processedRef.current;
-    // Re-sync on every switch: a long session can accumulate drift between
-    // two independently scheduled media elements.
-    if (source && processed && processed.src) {
-      try {
-        processed.currentTime = source.currentTime;
-      } catch {
-        // Ignored.
+      if (wasPlaying && upcoming.src) {
+        void upcoming
+          .play()
+          .then(() => setPlaying(true))
+          .catch(() => setPlaying(false));
       }
-    }
-    setSide(next);
-  }, []);
+    },
+    [active],
+  );
 
   return { playing, position, duration, side, ready, toggle, selectSide, seek };
 }
