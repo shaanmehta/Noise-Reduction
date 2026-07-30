@@ -6,7 +6,6 @@ import {
   dbToDepth,
   dbToStrength,
   depthToDb,
-  filterDefinition,
   smoothingIndex,
   strengthToDb,
   strengthWord,
@@ -27,7 +26,6 @@ interface FilterControlsProps {
 const MIN_HZ = 20;
 
 export function FilterControls({ settings, nyquist, disabled, onChange }: FilterControlsProps) {
-  const definition = filterDefinition(settings.kind);
   const ceiling = Math.max(nyquist - 20, 1000);
   const update = (patch: Partial<FilterSettings>) => onChange({ ...settings, ...patch });
 
@@ -56,8 +54,6 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
           );
         })}
       </div>
-
-      <p className="helper">{definition.summary}</p>
 
       {settings.kind === "spectral_gate" ? (
         <>
@@ -91,7 +87,7 @@ export function FilterControls({ settings, nyquist, disabled, onChange }: Filter
             max={SMOOTHING_STEPS.length - 1}
             step={1}
             display={SMOOTHING_STEPS[smoothing].label}
-            note="Cleans up the watery, warbling sound that noise removal can leave behind."
+            note="Smoothen out sharp random fluctuations left by the noise filter."
             disabled={disabled}
             onChange={(value) => {
               const step = SMOOTHING_STEPS[Math.round(value)] ?? SMOOTHING_STEPS[2];

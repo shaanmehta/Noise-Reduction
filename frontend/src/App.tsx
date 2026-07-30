@@ -249,6 +249,7 @@ export function App() {
                 {view === "waveform" ? (
                   <WaveformScope
                     data={showingProcessed ? result!.waveform : clip.waveform}
+                    reference={clip.waveform}
                     processed={showingProcessed}
                     duration={duration}
                     position={player.position}

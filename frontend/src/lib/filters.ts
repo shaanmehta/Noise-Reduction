@@ -18,7 +18,7 @@ export interface FilterDefinition {
   index: string;
   label: string;
   shortLabel: string;
-  summary: string;
+  /** One line under the name, describing what the filter is for. */
   best: string;
 }
 
@@ -26,34 +26,30 @@ export const FILTERS: FilterDefinition[] = [
   {
     kind: "spectral_gate",
     index: "01",
-    label: "Noise removal",
-    shortLabel: "Noise removal",
-    summary: "Learns what the background noise sounds like, then turns it down and leaves everything else alone.",
-    best: "Best all-round choice",
+    label: "Spectral Gate",
+    shortLabel: "Spectral Gate",
+    best: "For steady or quiet noise.",
   },
   {
     kind: "low_pass",
     index: "02",
-    label: "Cut highs",
-    shortLabel: "Cut highs",
-    summary: "Keeps low sounds and removes high ones.",
-    best: "Good for hiss",
+    label: "Low-Pass",
+    shortLabel: "Low-Pass",
+    best: "For high-frequency hiss.",
   },
   {
     kind: "high_pass",
     index: "03",
-    label: "Cut lows",
-    shortLabel: "Cut lows",
-    summary: "Keeps high sounds and removes low ones.",
-    best: "Good for rumble and hum",
+    label: "High-Pass",
+    shortLabel: "High-Pass",
+    best: "For low rumble.",
   },
   {
     kind: "band_pass",
     index: "04",
-    label: "Keep middle",
-    shortLabel: "Keep middle",
-    summary: "Removes both the lowest and the highest sounds.",
-    best: "Good for speech",
+    label: "Band-Pass",
+    shortLabel: "Band-Pass",
+    best: "For targeted mid noise.",
   },
 ];
 

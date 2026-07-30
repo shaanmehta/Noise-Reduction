@@ -149,32 +149,38 @@ button {
   align-items: center;
   gap: var(--s3);
   padding: var(--s3) var(--s4);
-  border-bottom: var(--line);
+  background: var(--panel-raised);
+  border-bottom: 1px solid var(--rule-bright);
 }
 
-/* The step number reads as a badge so the run of panels scans as a sequence. */
+/* The step number is the page's navigation, so it is given a real badge:
+   amber on a tinted field, large enough to pick out at a glance, and set on
+   the header's own surface so the run of panels scans as a numbered sequence. */
 .panel__index {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
-  border: 1px solid var(--rule-bright);
+  background: rgba(245, 180, 81, 0.12);
+  border: 1px solid rgba(245, 180, 81, 0.55);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text);
-}
-
-.panel--active .panel__index {
-  border-color: var(--processed);
+  letter-spacing: 0.02em;
   color: var(--processed);
 }
 
+.panel--active .panel__index {
+  background: var(--processed);
+  border-color: var(--processed);
+  color: #16110a;
+}
+
 .panel__title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
-  letter-spacing: 0.005em;
+  letter-spacing: -0.005em;
   color: var(--text);
   white-space: nowrap;
 }
@@ -182,7 +188,8 @@ button {
 .panel__fill {
   flex: 1;
   height: 1px;
-  background: var(--rule);
+  background: var(--rule-bright);
+  opacity: 0.5;
 }
 
 .panel__status {
@@ -1096,6 +1103,16 @@ button {
   }
 
   .button--primary {
+    color: #fffaf1;
+  }
+
+  /* The badge tint is mixed for the dark ground, so it is restated here. */
+  .panel__index {
+    background: rgba(138, 84, 9, 0.12);
+    border-color: rgba(138, 84, 9, 0.5);
+  }
+
+  .panel--active .panel__index {
     color: #fffaf1;
   }
 

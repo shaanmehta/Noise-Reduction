@@ -10,10 +10,10 @@ interface ComparePanelProps {
 }
 
 const LABELS: Record<string, string> = {
-  spectral_gate: "Noise removal",
-  low_pass: "Cut highs",
-  high_pass: "Cut lows",
-  band_pass: "Keep middle",
+  spectral_gate: "Spectral Gate",
+  low_pass: "Low-Pass Filter",
+  high_pass: "High-Pass Filter",
+  band_pass: "Band-Pass Filter",
 };
 
 /** Runs all four filters on the loaded clip and ranks them by how much they help. */

@@ -5,6 +5,15 @@ import type { Waveform } from "../lib/types";
 
 interface WaveformScopeProps {
   data: Waveform | null;
+  /**
+   * The source envelope, used only to set the vertical scale.
+   *
+   * Both traces are drawn at the same gain, derived from the source. Scaling
+   * each one to its own peak would make a quiet recording and a loud one look
+   * identical, and worse, would erase the very difference this view exists to
+   * show: after filtering, the processed trace should visibly sit lower.
+   */
+  reference?: Waveform | null;
   /** Colours the trace to match the source/processed selection above it. */
   processed: boolean;
   duration: number;
@@ -12,6 +21,22 @@ interface WaveformScopeProps {
   busy?: boolean;
   height?: number;
   onSeek?: (seconds: number) => void;
+}
+
+/**
+ * Ceiling on the zoom applied to quiet recordings.
+ *
+ * 8x is +18 dB, enough to bring a quiet phone recording up to a readable
+ * height without turning a near-silent clip into a wall of magnified noise.
+ */
+const MAX_GAIN = 8;
+
+function peakOf(waveform: Waveform | null | undefined): number {
+  if (!waveform || waveform.max.length === 0) return 1;
+  let peak = 0;
+  for (const value of waveform.max) peak = Math.max(peak, Math.abs(value));
+  for (const value of waveform.min) peak = Math.max(peak, Math.abs(value));
+  return peak;
 }
 
 /**
@@ -23,11 +48,12 @@ interface WaveformScopeProps {
  */
 export function WaveformScope({
   data,
+  reference,
   processed,
   duration,
   position,
   busy,
-  height = 190,
+  height = 280,
   onSeek,
 }: WaveformScopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,13 +94,18 @@ export function WaveformScope({
       context.stroke();
 
       if (data && data.max.length) {
+        // Fill the panel: a recording peaking at -20 dBFS would otherwise draw
+        // as a barely visible line down the middle.
+        const gain = Math.min(1 / Math.max(peakOf(reference ?? data), 1e-3), MAX_GAIN);
+        const clamp = (value: number) => Math.max(-1, Math.min(1, value * gain));
+
         const count = data.max.length;
         const step = width / count;
         context.beginPath();
         for (let index = 0; index < count; index += 1) {
           const x = index * step;
-          context.moveTo(x, middle - data.max[index] * amplitude);
-          context.lineTo(x, middle - data.min[index] * amplitude);
+          context.moveTo(x, middle - clamp(data.max[index]) * amplitude);
+          context.lineTo(x, middle - clamp(data.min[index]) * amplitude);
         }
         context.strokeStyle = processed ? theme.processed : theme.source;
         context.lineWidth = Math.max(step, 1);
@@ -96,7 +127,7 @@ export function WaveformScope({
     const observer = new ResizeObserver(draw);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [data, processed, duration, position, height]);
+  }, [data, reference, processed, duration, position, height]);
 
   const handleSeek = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!onSeek || duration <= 0) return;

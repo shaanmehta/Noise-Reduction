@@ -26,7 +26,8 @@ export function SpectrogramScope({
   duration,
   position,
   busy,
-  height = 220,
+  // Matched to the waveform so switching views does not shift the page.
+  height = 280,
   onSeek,
 }: SpectrogramScopeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
