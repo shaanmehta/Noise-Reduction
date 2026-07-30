@@ -28,9 +28,15 @@ from .store import store
 
 logger = logging.getLogger("noisereduce")
 
-# librosa and numpy release the GIL for the heavy parts, and a small pool keeps
-# one slow job from blocking the event loop or starving the others.
-executor = ThreadPoolExecutor(max_workers=max(2, (os.cpu_count() or 2)), thread_name_prefix="dsp")
+# librosa and numpy release the GIL for the heavy parts, so a small pool keeps
+# one slow job from blocking the event loop. The size is capped by
+# configuration rather than by CPU count: the limit here is memory, not
+# processor time, and a many-core host would otherwise run enough concurrent
+# jobs to exhaust a small instance.
+executor = ThreadPoolExecutor(
+    max_workers=max(1, min(settings.dsp_workers, os.cpu_count() or 2)),
+    thread_name_prefix="dsp",
+)
 
 app = FastAPI(
     title="NoiseReduce",

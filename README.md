@@ -79,5 +79,52 @@ cd frontend && npm install && npm run dev
 ./.venv/bin/pip install -r backend/requirements-dev.txt && cd backend && ../.venv/bin/python -m pytest
 ```
 
+## Deployment
 
+The Dockerfile builds the frontend and serves it from the same process as the API, so the whole application is one container on one origin and needs no CORS configuration.
 
+Run that image locally:
+
+```bash
+docker compose up --build
+```
+
+### What this service needs from a host
+
+Two properties decide where this can run.
+
+The installed dependency set is about 400 MB, because librosa pulls in numba and llvmlite. That is past the 250 MB bundle ceiling on every serverless platform, so a host that runs containers is required. Vercel, Netlify and Lambda cannot serve this backend.
+
+Memory is the binding constraint, and it scales with the length of the clip being processed rather than with traffic. Peak resident memory, sustained across repeated requests at the worst case of stereo audio at 48 kHz:
+
+| Longest clip allowed | Peak memory | Spare against 512 MB |
+| --- | --- | --- |
+| Idle, imports loaded | 117 MB | |
+| 15 s | 431 MB | 81 MB |
+| 30 s | 487 MB | 25 MB |
+| 60 s | 520 MB | over the ceiling |
+| 120 s | 929 MB | far over |
+
+Exceeding a host's memory limit does not surface as an error. The container is killed and the visitor gets a dead page, which is why the deployed limits are set from measurement rather than optimism.
+
+Each concurrent job multiplies these figures, which is why `DSP_WORKERS` exists.
+
+Run exactly one instance. Decoded clips live in a single process's memory, so a second instance would receive clip identifiers it has never seen and reject them.
+
+### Render
+
+`render.yaml` configures a free Render service. In the dashboard choose **Blueprints**, create a new Blueprint Instance, and point it at this repository. Nothing needs configuring by hand.
+
+The blueprint caps uploads at **15 seconds and 5 MB**, holds at most two clips, and runs a single processing worker. Those numbers come from the table above: they keep sustained peak memory at 431 MB, which measurement shows reaches a steady state rather than creeping upward. Longer uploads are refused with a plain message instead of taking the service down.
+
+The free instance also provides roughly a tenth of a CPU, so each filter change takes a few seconds rather than the fraction of a second it takes locally. The interface debounces slider input and shows a progress sweep while it waits.
+
+Free instances sleep after about fifteen minutes of inactivity. The first visit afterwards waits through a cold start, and anything held in memory is gone, which a visitor sees as an expired upload.
+
+To lift the limits, move to a paid instance and raise `MAX_DURATION_SECONDS`, `MAX_STORE_BYTES` and `DSP_WORKERS` together, then measure again.
+
+### Configuration
+
+Every backend setting is an environment variable with a working default. See `.env.example` for the full list, covering upload limits, clip retention, rate limits, worker count and the processing timeout.
+
+Uploaded audio never reaches the deployed image. The Dockerfile copies only `backend/app`, `backend/requirements.txt` and the built frontend, and `.dockerignore` excludes audio at every depth. The demonstration clip the API can generate is synthesised from oscillators and noise at request time, so no recording is shipped.

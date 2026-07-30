@@ -1,0 +1,71 @@
+# Render Blueprint. In the Render dashboard choose Blueprints, then point a new
+# Blueprint Instance at this repository; every setting below is applied for you.
+#
+# The limits here are sized for Render's free instance type, which caps a
+# service at 512 MB of memory and about a tenth of a CPU.
+#
+# Memory is the binding constraint, and it scales with the length of the clip
+# being processed rather than with traffic. Measured peak resident memory,
+# sustained over repeated requests at the worst case of stereo audio at 48 kHz:
+#
+#     idle, imports loaded    117 MB
+#     15 s clips              431 MB   <- this configuration, 81 MB spare
+#     30 s clips              487 MB   <- only 25 MB spare, too close
+#     60 s clips              520 MB   <- already over the ceiling
+#
+# Going over does not produce an error anyone can see; the container is killed
+# and the visitor gets a dead page. Hence 15 seconds, which measurement shows
+# reaches a steady state rather than creeping upward under sustained use.
+#
+# On a paid instance, raise MAX_DURATION_SECONDS, MAX_STORE_BYTES and
+# DSP_WORKERS together, and re-measure before trusting the result.
+
+services:
+  - type: web
+    name: noisereduce
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      # Upload limits. The frontend reads these from /api/config and shows them
+      # on the drop target, so changing them here updates the interface too.
+      - key: MAX_DURATION_SECONDS
+        value: "15"
+      - key: MAX_UPLOAD_BYTES
+        value: "5242880"
+
+      # Clip retention. Everything held here is resident memory competing with
+      # whichever job is actively processing, so the store stays small and
+      # expires quickly.
+      - key: CLIP_TTL_SECONDS
+        value: "600"
+      - key: MAX_CLIPS
+        value: "2"
+      - key: MAX_STORE_BYTES
+        value: "16777216"
+      - key: MAX_RENDERS_PER_CLIP
+        value: "2"
+
+      # One job at a time. Two concurrent clips would roughly double peak
+      # memory and take the instance past its ceiling.
+      - key: DSP_WORKERS
+        value: "1"
+
+      # Generous, because a tenth of a CPU makes each job several times slower
+      # than it is on a development machine.
+      - key: PROCESSING_TIMEOUT_SECONDS
+        value: "45"
+
+      # Rate limits apply per client address, and everyone behind one network
+      # shares an address, so the budget is set for a room rather than a person.
+      - key: UPLOAD_RATE
+        value: "40"
+      - key: UPLOAD_WINDOW_SECONDS
+        value: "300"
+      - key: PROCESS_RATE
+        value: "400"
+      - key: PROCESS_WINDOW_SECONDS
+        value: "60"

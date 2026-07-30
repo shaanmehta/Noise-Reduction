@@ -55,6 +55,12 @@ class Settings:
         default_factory=lambda: _float("PROCESSING_TIMEOUT_SECONDS", 30.0)
     )
 
+    # Concurrent processing jobs. Each one holds a full spectrogram in memory
+    # while it runs, so this multiplies peak memory directly: two jobs on a
+    # 512 MB instance is enough to be killed by the out-of-memory reaper.
+    # Raise it only alongside the instance size.
+    dsp_workers: int = field(default_factory=lambda: _int("DSP_WORKERS", 2))
+
     allowed_origins: list[str] = field(default_factory=_origins)
     static_dir: str = field(default_factory=lambda: os.environ.get("STATIC_DIR", ""))
 
