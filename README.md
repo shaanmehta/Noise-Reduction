@@ -100,8 +100,9 @@ Memory is the binding constraint, and it scales with the length of the clip bein
 | Longest clip allowed | Peak memory | Spare against 512 MB |
 | --- | --- | --- |
 | Idle, imports loaded | 117 MB | |
-| 15 s | 431 MB | 81 MB |
-| 30 s | 487 MB | 25 MB |
+| 15 s | 431 MB, settled | 81 MB |
+| 30 s, stereo throughout | 500 MB, still climbing | 12 MB |
+| 30 s, folded to mono | 411 MB first request | 101 MB |
 | 60 s | 520 MB | over the ceiling |
 | 120 s | 929 MB | far over |
 
@@ -115,7 +116,11 @@ Run exactly one instance. Decoded clips live in a single process's memory, so a 
 
 `render.yaml` configures a free Render service. In the dashboard choose **Blueprints**, create a new Blueprint Instance, and point it at this repository. Nothing needs configuring by hand.
 
-The blueprint caps uploads at **15 seconds and 5 MB**, holds at most two clips, and runs a single processing worker. Those numbers come from the table above: they keep sustained peak memory at 431 MB, which measurement shows reaches a steady state rather than creeping upward. Longer uploads are refused with a plain message instead of taking the service down.
+The blueprint caps uploads at **30 seconds and 10 MB**, holds at most two clips, and runs a single processing worker. Longer uploads are refused with a plain message instead of taking the service down.
+
+Thirty seconds only fits because of `MAX_PROCESSING_SAMPLES`. Once a clip grows past that budget it is folded to mono, which halves a stereo recording while keeping its full frequency range. For noise reduction that is a cheaper loss than trimming the top of the spectrum, and it takes a 30 second stereo clip from 500 MB down to 411 MB. Clips short enough to fit the budget keep their channels untouched, and the interface says when a recording has been folded.
+
+One caveat is worth stating plainly. Under sustained load, resident memory drifts slowly upward as the allocator retains what each job frees. `app/memory.py` hands that memory back after every job, which works on Linux as Render runs, but this was developed on macOS where the mechanism does not exist and so the benefit could not be measured. If the service restarts under load, check the Render logs for an out-of-memory kill and drop `MAX_DURATION_SECONDS` to 20.
 
 The free instance also provides roughly a tenth of a CPU, so each filter change takes a few seconds rather than the fraction of a second it takes locally. The interface debounces slider input and shows a progress sweep while it waits.
 

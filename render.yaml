@@ -1,24 +1,31 @@
 # Render Blueprint. In the Render dashboard choose Blueprints, then point a new
 # Blueprint Instance at this repository; every setting below is applied for you.
 #
-# The limits here are sized for Render's free instance type, which caps a
-# service at 512 MB of memory and about a tenth of a CPU.
+# Render's free instance type caps a service at 512 MB of memory and about a
+# tenth of a CPU. Exceeding the memory ceiling produces no error anyone can
+# see: the container is killed and visitors get a dead page. So the settings
+# below come from measurement rather than from optimism.
 #
-# Memory is the binding constraint, and it scales with the length of the clip
-# being processed rather than with traffic. Measured peak resident memory,
-# sustained over repeated requests at the worst case of stereo audio at 48 kHz:
+# Peak resident memory, measured at the worst case of stereo audio at 48 kHz
+# sustained over repeated requests:
 #
-#     idle, imports loaded    117 MB
-#     15 s clips              431 MB   <- this configuration, 81 MB spare
-#     30 s clips              487 MB   <- only 25 MB spare, too close
-#     60 s clips              520 MB   <- already over the ceiling
+#     idle, imports loaded                117 MB
+#     15 s clips                          431 MB, settled
+#     30 s clips, stereo throughout       500 MB, still climbing
+#     30 s clips, folded to mono          411 MB first request
+#     60 s clips                          520 MB, over the ceiling
 #
-# Going over does not produce an error anyone can see; the container is killed
-# and the visitor gets a dead page. Hence 15 seconds, which measurement shows
-# reaches a steady state rather than creeping upward under sustained use.
+# The 30 second limit is made to fit by MAX_PROCESSING_SAMPLES, which folds a
+# clip to mono once it grows past the budget. That halves a stereo recording
+# while keeping its full frequency range, which is the cheaper loss for noise
+# reduction than trimming the top of the spectrum.
 #
-# On a paid instance, raise MAX_DURATION_SECONDS, MAX_STORE_BYTES and
-# DSP_WORKERS together, and re-measure before trusting the result.
+# The remaining risk is the slow upward drift seen under sustained load, which
+# is the memory allocator retaining what each job frees rather than a leak.
+# app/memory.py returns that memory to the operating system after every job,
+# which works on Linux as Render runs, but could not be verified on the macOS
+# machine this was developed on. If the service restarts under load, look for
+# "Out of memory" in the Render logs and drop MAX_DURATION_SECONDS to 20.
 
 services:
   - type: web
@@ -33,19 +40,25 @@ services:
       # Upload limits. The frontend reads these from /api/config and shows them
       # on the drop target, so changing them here updates the interface too.
       - key: MAX_DURATION_SECONDS
-        value: "15"
+        value: "30"
       - key: MAX_UPLOAD_BYTES
-        value: "5242880"
+        value: "10485760"
 
-      # Clip retention. Everything held here is resident memory competing with
-      # whichever job is actively processing, so the store stays small and
-      # expires quickly.
+      # Total samples, counted across channels, that one clip may carry into
+      # processing. 1.6 million is 30 seconds of mono at 48 kHz, so a stereo
+      # clip at the duration limit is folded to mono and everything shorter is
+      # left alone.
+      - key: MAX_PROCESSING_SAMPLES
+        value: "1600000"
+
+      # Clip retention. Two folded clips fit here, so two visitors can work at
+      # the same time without evicting each other.
       - key: CLIP_TTL_SECONDS
         value: "600"
       - key: MAX_CLIPS
         value: "2"
       - key: MAX_STORE_BYTES
-        value: "16777216"
+        value: "26214400"
       - key: MAX_RENDERS_PER_CLIP
         value: "2"
 

@@ -181,8 +181,8 @@ export function App() {
                 <p className="filemeta">
                   <strong>{clip.clip.filename}</strong>
                   <span>
-                    {channelLabel(clip.clip.channels)} / {clip.clip.sample_rate.toLocaleString()} Hz /{" "}
-                    {duration.toFixed(2)} s
+                    {channelLabel(clip.clip.channels, clip.clip.original_channels)} /{" "}
+                    {clip.clip.sample_rate.toLocaleString()} Hz / {duration.toFixed(2)} s
                   </span>
                 </p>
               ) : null}

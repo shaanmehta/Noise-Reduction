@@ -6,6 +6,8 @@ the original scripts this project grew out of, so that they cannot return.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 
@@ -255,6 +257,76 @@ class TestDecoding:
             audio_io.decode(b"", "empty.wav")
         with pytest.raises(Exception):
             audio_io.decode(b"this is not audio" * 100, "notes.txt")
+
+
+class TestProcessingBudget:
+    """Long clips are reduced to fit a memory ceiling, cheapest loss first."""
+
+    def test_clip_within_budget_is_untouched(self):
+        sample_rate = 44_100
+        stereo = np.stack([noisy_speech(sample_rate, 1.0, 1), noisy_speech(sample_rate, 1.0, 2)])
+
+        fitted, rate = audio_io._fit_processing_budget(stereo, sample_rate)
+
+        assert rate == sample_rate
+        assert fitted.shape == stereo.shape
+
+    def test_stereo_is_folded_to_mono_before_any_resampling(self, monkeypatch):
+        from app import config
+
+        sample_rate = 44_100
+        stereo = np.stack([noisy_speech(sample_rate, 2.0, 1), noisy_speech(sample_rate, 2.0, 2)])
+        # A budget that one channel fits inside but two do not.
+        monkeypatch.setattr(config, "settings", replace(config.settings, max_processing_samples=stereo.shape[1]))
+
+        fitted, rate = audio_io._fit_processing_budget(stereo, sample_rate)
+
+        assert fitted.shape[0] == 1
+        # Folding was enough, so the frequency range is preserved.
+        assert rate == sample_rate
+        assert fitted.shape[1] == stereo.shape[1]
+
+    def test_resampling_only_happens_when_folding_is_not_enough(self, monkeypatch):
+        from app import config
+
+        sample_rate = 44_100
+        mono = noisy_speech(sample_rate, 2.0)[None, :]
+        monkeypatch.setattr(config, "settings", replace(config.settings, max_processing_samples=mono.shape[1] // 2))
+
+        fitted, rate = audio_io._fit_processing_budget(mono, sample_rate)
+
+        assert rate < sample_rate
+        assert rate >= audio_io.MIN_SAMPLE_RATE
+        assert fitted.shape[0] == 1
+        assert fitted.shape[1] < mono.shape[1]
+
+    def test_budget_is_respected_end_to_end(self, monkeypatch):
+        from app import config
+
+        sample_rate = 48_000
+        stereo = np.stack([noisy_speech(sample_rate, 2.0, 1), noisy_speech(sample_rate, 2.0, 2)])
+        payload = audio_io.encode_wav(stereo, sample_rate)
+        budget = stereo.shape[1]
+        monkeypatch.setattr(config, "settings", replace(config.settings, max_processing_samples=budget))
+
+        decoded = audio_io.decode(payload, "long.wav")
+
+        assert decoded.channels * decoded.n_samples <= budget
+        assert decoded.original_channels == 2
+        # Duration survives the reduction; only the detail does.
+        assert decoded.duration == pytest.approx(2.0, abs=0.02)
+
+    def test_disabled_budget_changes_nothing(self, monkeypatch):
+        from app import config
+
+        sample_rate = 44_100
+        stereo = np.stack([noisy_speech(sample_rate, 1.0, 1), noisy_speech(sample_rate, 1.0, 2)])
+        monkeypatch.setattr(config, "settings", replace(config.settings, max_processing_samples=0))
+
+        fitted, rate = audio_io._fit_processing_budget(stereo, sample_rate)
+
+        assert rate == sample_rate
+        assert np.array_equal(fitted, stereo)
 
 
 class TestSample:

@@ -61,6 +61,19 @@ class Settings:
     # Raise it only alongside the instance size.
     dsp_workers: int = field(default_factory=lambda: _int("DSP_WORKERS", 2))
 
+    # Ceiling on the number of samples, counted across all channels, that a
+    # single clip may carry into processing. Peak memory tracks this figure
+    # almost linearly, so it is the one setting that decides whether a long
+    # clip fits inside a small instance.
+    #
+    # A clip above the ceiling is first folded to mono, which halves a stereo
+    # recording while keeping its full frequency range, and only resampled
+    # downward if that is still not enough. The default is high enough that
+    # nothing within the default duration limit is ever touched.
+    max_processing_samples: int = field(
+        default_factory=lambda: _int("MAX_PROCESSING_SAMPLES", 24_000_000)
+    )
+
     allowed_origins: list[str] = field(default_factory=_origins)
     static_dir: str = field(default_factory=lambda: os.environ.get("STATIC_DIR", ""))
 

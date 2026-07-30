@@ -153,6 +153,44 @@ def _resample(samples: np.ndarray, source_rate: int, target_rate: int) -> np.nda
     )
 
 
+def _fit_processing_budget(samples: np.ndarray, sample_rate: int) -> tuple[np.ndarray, int]:
+    """Reduce a clip until it fits the configured processing budget.
+
+    Peak memory during filtering tracks the total sample count almost
+    linearly, and a host with a fixed ceiling has no way to recover from
+    exceeding it: the process is killed rather than given an error to report.
+
+    Two reductions are applied in order of how much they cost the listener.
+    Folding to mono halves a stereo recording while preserving its full
+    frequency range, which for noise reduction is the cheaper loss. Only if
+    that is still not enough is the clip resampled downward, which trims the
+    top of the spectrum.
+    """
+    from ..config import settings
+
+    budget = settings.max_processing_samples
+    if budget <= 0:
+        return samples, sample_rate
+
+    channels, length = samples.shape
+    if channels * length <= budget:
+        return samples, sample_rate
+
+    if channels > 1:
+        samples = samples.mean(axis=0, keepdims=True).astype(np.float32)
+        channels, length = samples.shape
+        if channels * length <= budget:
+            return samples, sample_rate
+
+    target_rate = int(sample_rate * budget / max(channels * length, 1))
+    target_rate = max(MIN_SAMPLE_RATE, min(target_rate, sample_rate))
+    if target_rate < sample_rate:
+        samples = _resample(samples, sample_rate, target_rate)
+        sample_rate = target_rate
+
+    return samples, sample_rate
+
+
 def decode(payload: bytes, filename: str = "") -> DecodedAudio:
     """Decode arbitrary uploaded bytes into a normalised float array."""
     if not payload:
@@ -197,6 +235,8 @@ def decode(payload: bytes, filename: str = "") -> DecodedAudio:
     target_rate = min(original_rate, MAX_SAMPLE_RATE)
     if target_rate != original_rate:
         samples = _resample(samples, original_rate, target_rate)
+
+    samples, target_rate = _fit_processing_budget(samples, target_rate)
 
     samples = np.nan_to_num(samples, nan=0.0, posinf=0.0, neginf=0.0)
     peak = float(np.max(np.abs(samples))) if samples.size else 0.0

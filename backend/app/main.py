@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import service
+from . import memory, service
 from .config import settings
 from .dsp.audio_io import SUPPORTED_EXTENSIONS
 from .errors import AppError, LimitError, ProcessingTimeout
@@ -71,12 +71,25 @@ async def handle_unexpected(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+def _run_and_release(function, *args):
+    """Run a job, then hand its freed memory back to the operating system.
+
+    Without this, resident memory ratchets upward across requests as the
+    allocator retains what each job released, which matters on a host with a
+    fixed memory ceiling.
+    """
+    try:
+        return function(*args)
+    finally:
+        memory.release()
+
+
 async def _run(function, *args):
     """Execute a blocking job with a hard time limit."""
     loop = asyncio.get_running_loop()
     try:
         return await asyncio.wait_for(
-            loop.run_in_executor(executor, function, *args),
+            loop.run_in_executor(executor, _run_and_release, function, *args),
             timeout=settings.processing_timeout_seconds,
         )
     except asyncio.TimeoutError as exc:
@@ -87,7 +100,7 @@ async def _run(function, *args):
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "store": store.stats()}
+    return {"status": "ok", "store": store.stats(), "releases_memory": memory.can_release}
 
 
 @app.get("/api/config")

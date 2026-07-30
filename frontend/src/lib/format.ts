@@ -31,10 +31,14 @@ export function bytes(value: number): string {
   return `${Math.round(value / 1024)} kB`;
 }
 
-export function channelLabel(channels: number): string {
-  if (channels === 1) return "Mono";
-  if (channels === 2) return "Stereo";
-  return `${channels} channels`;
+export function channelLabel(channels: number, originalChannels?: number): string {
+  const name = channels === 1 ? "Mono" : channels === 2 ? "Stereo" : `${channels} channels`;
+  // Long clips are folded to mono to stay inside the deployed memory limit.
+  // Say so rather than letting a stereo upload quietly come back mono.
+  if (originalChannels !== undefined && originalChannels > channels) {
+    return `${name} (from ${originalChannels === 2 ? "stereo" : `${originalChannels} channels`})`;
+  }
+  return name;
 }
 
 const METHOD_LABELS: Record<string, string> = {
