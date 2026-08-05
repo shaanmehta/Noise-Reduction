@@ -12,13 +12,14 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from . import memory, service
+from . import memory, service, warmup
 from .config import settings
 from .dsp.audio_io import SUPPORTED_EXTENSIONS
 from .errors import AppError, LimitError, ProcessingTimeout
@@ -38,12 +39,22 @@ executor = ThreadPoolExecutor(
     thread_name_prefix="dsp",
 )
 
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Compile and import everything the processing stack needs before a visitor
+    # can be the one waiting for it.
+    warmup.start_background()
+    yield
+    executor.shutdown(wait=False, cancel_futures=True)
+
+
 app = FastAPI(
     title="NoiseReduce",
     description="STFT-based noise reduction and signal-to-noise measurement for uploaded audio.",
     version="1.0.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -100,7 +111,12 @@ async def _run(function, *args):
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "store": store.stats(), "releases_memory": memory.can_release}
+    return {
+        "status": "ok",
+        "store": store.stats(),
+        "releases_memory": memory.can_release,
+        "warm": warmup.is_ready(),
+    }
 
 
 @app.get("/api/config")

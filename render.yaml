@@ -68,9 +68,11 @@ services:
         value: "1"
 
       # Generous, because a tenth of a CPU makes each job several times slower
-      # than it is on a development machine.
+      # than it is on a development machine. The library warm-up that used to
+      # dominate the first request now happens at start-up instead, so this
+      # only ever has to cover the actual work.
       - key: PROCESSING_TIMEOUT_SECONDS
-        value: "45"
+        value: "60"
 
       # Rate limits apply per client address, and everyone behind one network
       # shares an address, so the budget is set for a room rather than a person.

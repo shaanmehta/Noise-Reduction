@@ -54,7 +54,10 @@ export function Dropzone({ config, busy, compact, onFile }: DropzoneProps) {
 
   const accept = config?.supported_extensions.join(",") ?? "audio/*";
   const limit = config ? bytes(config.max_upload_bytes) : "";
-  const seconds = config ? `${Math.round(config.max_duration_seconds)} s` : "";
+  const seconds = config ? `${Math.round(config.max_duration_seconds)} seconds` : "";
+  const formats = config
+    ? config.supported_extensions.map((entry) => entry.replace(".", "").toUpperCase()).join("  ")
+    : "";
 
   return (
     <>
@@ -77,9 +80,14 @@ export function Dropzone({ config, busy, compact, onFile }: DropzoneProps) {
         {compact ? null : (
           <>
             <span className="dropzone__secondary">or click to browse</span>
-            <span className="dropzone__hint">
-              MP3, WAV, M4A and more{limit && seconds ? ` / up to ${limit}, ${seconds}` : ""}
-            </span>
+            {/* Every accepted extension, straight from the server, so the list
+                can never drift from what the API will actually take. */}
+            <span className="dropzone__hint">{formats}</span>
+            {limit && seconds ? (
+              <span className="dropzone__hint">
+                Up to {limit} and {seconds}
+              </span>
+            ) : null}
           </>
         )}
       </button>
